@@ -2,6 +2,8 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 
+# Código copiado de noobtuts.com para compreensão dos básicos de PyOpenGL
+
 window = 0                                             # glut window number
 width, height = 500, 400                               # window size
 

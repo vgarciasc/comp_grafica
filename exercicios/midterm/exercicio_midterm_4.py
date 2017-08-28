@@ -49,7 +49,6 @@ def drawBird(side, angle):
     drawWing(side)
     glPopMatrix()    
 
-
 renderScene_angle = 0
 renderScene_down = False
 
