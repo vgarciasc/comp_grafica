@@ -8,4 +8,4 @@
 - É necessário compilar em Python 2.
 
 ## Exercícios
-A lista com os enunciados originais dos exercícios pode ser encontrada [aqui](../CMSC_427_-_Exercices.pdf).
+A lista com os enunciados originais dos exercícios pode ser encontrada [aqui](../master/CMSC_427_-_Exercices.pdf).
