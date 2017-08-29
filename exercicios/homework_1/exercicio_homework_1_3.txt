@@ -1,0 +1,13 @@
+(a) 
+    Calcular a distância entre C1 e C2.
+    d = dist(C1, C2) = sqrt((C2x - C1x)², (C2y - C1y)²)
+
+    Se d < (r1 + r2):
+        Circunferências se sobrepõem;
+    Se r1 < r2 && d < r1 * 2
+        || r2 < r1 && d < r2 * 2
+        || r2 == r1 && C1 = C2
+        Uma circunferência contém a outra.
+
+(b)
+    ??

@@ -1,0 +1,8 @@
+(a)
+    vx = px * (w / (x max - x min))
+    vy = py * (h / (y max - y min))
+
+(b)
+    [ w / (x max - x min) 0                   0
+      0                   h / (y max - y min) 0
+      0                   0                   1 ]
