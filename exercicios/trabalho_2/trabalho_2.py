@@ -4,10 +4,12 @@ from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from math import *
+import random
 
 class ApplicationState:
     NONE = 0
     DRAWING_POLYGON = 1
+    HOLDING_POLYGON = 2
 
 #classe utilizada para definir pontos (vetores 2D)
 class Point:
@@ -40,15 +42,42 @@ class Line:
         return "[" + str(self.src) + ", " + str(self.dst) + "]"
 
 class Polygon:
-    points = []
+    local_points = []
+    global_points = []
+    lines = []
+    p_id = -1
+    color = []
 
     def __init__(self, lines):
-        self.points = []
+        self.lines = list(lines)
+        self.local_points = []
+        self.global_points = []
+        self.p_id = len(polygons)
+        self.color = [random.randrange(0, 255) / float(255), random.randrange(0, 255) / float(255), random.randrange(0, 255) / float(255)]
+
         for i in range(1, len(lines)):
-            self.points.append(lines[i].src)
+            self.global_points.append(lines[i].src)
+
+        self.update_offset(lines[0].src)
+
+    def update_offset(self, point):
+        self.local_points = []
+        for op in self.global_points:
+            self.local_points.append(Point(op.x - point.x, op.y - point.y))
+
+    def center_around(self, point):
+        self.global_points = []
+        for op in self.local_points:
+            self.global_points.append(Point(op.x + point.x, op.y + point.y))
+
+        self.lines = []
+        for i in range(1, len(self.global_points)):
+            self.lines.append(Line(self.global_points[i-1], self.global_points[i]))
+        self.lines.append(Line(self.global_points[0], self.global_points[len(self.global_points) - 1]))
 
 #vetor que armazena todas as linhas criadas
 currentState = ApplicationState.NONE
+selected_polygon = -1
 previewLines = []
 polygons = []
 
@@ -65,6 +94,9 @@ def displayCallback():
 
     if currentState == ApplicationState.DRAWING_POLYGON:
         drawLine(Line(lastPoint, currentMousePoint))
+    elif currentState == ApplicationState.HOLDING_POLYGON:
+        pl = polygons[selected_polygon]
+        pl.center_around(currentMousePoint)
 
     # for i in range(0, len(polygons)):
     #     print "polygon #" + str(i) + ": length " + str(len(polygons[i].points))
@@ -100,16 +132,40 @@ def onMouse2Down(x, y):
         currentState = ApplicationState.NONE
         previewLines = []
 
+def hasClickedOnPolygon():
+    for polygon in polygons:
+        if pointInsidePolygon(currentMousePoint, polygon):
+            return polygon
+    return None
+
+def pointInsidePolygon(point, polygon):
+    line = Line(point, Point(0, 0))
+    intersections = 0
+    for l in polygon.lines:
+        if getIntersection(line, l):
+            intersections += 1
+    
+    # print str(intersections) + " intersections"
+    return intersections % 2 == 1
+
 #quando o botão esquerdo do mouse é pressionado, coordenadas são armazenadas
 def onMouse1Down(x, y):
     global currentState
     global lastPoint
+    global selected_polygon
 
     if currentState == ApplicationState.NONE:
-        currentState = ApplicationState.DRAWING_POLYGON
-        lastPoint = Point(x, y)
-    # elif currentState == ApplicationState.DRAWING_POLYGON:
-    #     lastPoint = Point(x, y)
+        polygonClicked = hasClickedOnPolygon()
+        if polygonClicked is not None:
+            currentState = ApplicationState.HOLDING_POLYGON
+            selected_polygon = polygonClicked.p_id
+            polygonClicked.update_offset(currentMousePoint)
+        else:
+            currentState = ApplicationState.DRAWING_POLYGON
+            lastPoint = Point(x, y)
+    elif currentState == ApplicationState.HOLDING_POLYGON:
+        currentState = ApplicationState.NONE
+        selected_polygon = -1
 
 #quando o botão esquerdo do mouse é solto, é adicionada uma linha que vai do
 #ponto em que o mouse foi pressionado até o ponto em que o mouse foi solto
@@ -119,8 +175,6 @@ def onMouse1Up(x, y):
     global previewLines
     global currentState
 
-    #if currentState == ApplicationState.NONE:
-    #
     if currentState == ApplicationState.DRAWING_POLYGON:
         #created point in polygon, check if point closes polygon
         if len(previewLines) > 0 and currentMousePoint.distance(previewLines[0].src) < 10:
@@ -141,14 +195,14 @@ def onMouse1Up(x, y):
 
 def drawPolygon(polygon):
     glLineWidth(2.5)
-    glColor3f(0.6, 0.6, 0.6)
+    glColor3f(polygon.color[0], polygon.color[1], polygon.color[2])
     
     tess = gluNewTess()
     gluTessCallback(tess, GLU_BEGIN, glBegin)
     gluTessCallback(tess, GLU_VERTEX, glVertex3dv)
     gluTessCallback(tess, GLU_END, glEnd)
     gluBeginPolygon(tess)
-    for point in polygon.points:
+    for point in polygon.global_points:
         pt = worldToScreenPoint(point)
         aux = [pt.x, pt.y, 0]
         gluTessVertex(tess, aux, aux)
