@@ -75,11 +75,30 @@ class Polygon:
             self.lines.append(Line(self.global_points[i-1], self.global_points[i]))
         self.lines.append(Line(self.global_points[0], self.global_points[len(self.global_points) - 1]))
 
+class Joint:
+    polygon_curr = None
+    polygon_next = None
+    local_position = Point(0, 0)
+    global_position = Point(0, 0)
+
+    def __init__(self, point, p_curr, p_next):
+        self.global_position = point
+        self.polygon_curr = p_curr
+        self.polygon_next = p_next
+        self.local_position = Point(self.global_position.x - self.polygon_curr.lines[0].src.x, self.global_position.y - self.polygon_curr.lines[0].src.y)
+
+    def center_around(self, point):
+        self.global_position = Point(self.local_position.x + point.x, self.local_position.y + point.y)
+
+    def update_offset(self, point):
+        self.local_position = Point(self.global_position.x - point.x, self.global_position.y - point.y)
+
 #vetor que armazena todas as linhas criadas
 currentState = ApplicationState.NONE
 selected_polygon = -1
 previewLines = []
 polygons = []
+joints = []
 
 lastPoint = Point(0, 0)
 currentMousePoint = Point(0, 0)
@@ -89,6 +108,9 @@ def displayCallback():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
 
+    for polygon in polygons:
+        drawPolygon(polygon)
+
     for line in previewLines:
         drawLine(line)
 
@@ -97,15 +119,35 @@ def displayCallback():
     elif currentState == ApplicationState.HOLDING_POLYGON:
         pl = polygons[selected_polygon]
         pl.center_around(currentMousePoint)
+        p, j = getConnectedPolygons(pl)
+        for poly in p:
+            poly.center_around(currentMousePoint)
+        for join in j:
+            join.center_around(currentMousePoint)
 
-    # for i in range(0, len(polygons)):
-    #     print "polygon #" + str(i) + ": length " + str(len(polygons[i].points))
-
-    for polygon in polygons:
-        drawPolygon(polygon)
+    for joint in joints:
+        drawPoint(joint.global_position)
 
     glutSwapBuffers()
 
+def getConnectedPolygons(polygon):
+    k = 0
+    output_pl = [polygon]
+    output_j = []
+    while k < len(output_pl):
+        for j in joints:
+            if j.polygon_curr == output_pl[k]:
+                if j.polygon_next not in output_pl:
+                    output_pl.append(j.polygon_next)
+                if j not in output_j:
+                    output_j.append(j)
+            elif j.polygon_next == output_pl[k]:
+                if j.polygon_curr not in output_pl:
+                    output_pl.append(j.polygon_curr)
+                if j not in output_j:
+                    output_j.append(j)
+        k += 1
+    return output_pl, output_j
 def mousePosUpdater(x, y):
     global currentMousePoint
     currentMousePoint = Point(x, y)
@@ -131,6 +173,19 @@ def onMouse2Down(x, y):
     if currentState == ApplicationState.DRAWING_POLYGON:
         currentState = ApplicationState.NONE
         previewLines = []
+    elif currentState == ApplicationState.NONE:
+        poly = hasClickedOnPolygonPair()
+        if poly is not None:
+            joints.append(Joint(currentMousePoint, poly[0], poly[1]))
+
+def hasClickedOnPolygonPair():
+    output = []
+    for polygon in polygons:
+        if pointInsidePolygon(currentMousePoint, polygon):
+           output.append(polygon)
+           if len(output) == 2:
+               return output
+    return None    
 
 def hasClickedOnPolygon():
     for polygon in polygons:
@@ -160,6 +215,12 @@ def onMouse1Down(x, y):
             currentState = ApplicationState.HOLDING_POLYGON
             selected_polygon = polygonClicked.p_id
             polygonClicked.update_offset(currentMousePoint)
+
+            p, j = getConnectedPolygons(polygonClicked)
+            for poly in p:
+                poly.update_offset(currentMousePoint)
+            for joint in j:
+                joint.update_offset(currentMousePoint)
         else:
             currentState = ApplicationState.DRAWING_POLYGON
             lastPoint = Point(x, y)
