@@ -9,7 +9,20 @@ import random
 class ApplicationState:
     NONE = 0
     DRAWING_POLYGON = 1
-    HOLDING_POLYGON = 2
+    MOVING_POLYGON = 2
+    ROTATING_POLYGON = 3
+
+def str_application_state(state):
+    if state == ApplicationState.NONE:
+        return "NONE"
+    elif state == ApplicationState.DRAWING_POLYGON:
+        return "DRAWING_POLYGON"
+    elif state == ApplicationState.MOVING_POLYGON:
+        return "MOVING_POLYGON"
+    elif state == ApplicationState.ROTATING_POLYGON:
+        return "ROTATING_POLYGON"
+    else:
+        return "????"
 
 #classe utilizada para definir pontos (vetores 2D)
 class Point:
@@ -95,10 +108,12 @@ class Joint:
 
 #vetor que armazena todas as linhas criadas
 currentState = ApplicationState.NONE
-selected_polygon = -1
 previewLines = []
 polygons = []
 joints = []
+
+selected_polygon = -1
+holding_m1 = False
 
 lastPoint = Point(0, 0)
 currentMousePoint = Point(0, 0)
@@ -108,15 +123,27 @@ def displayCallback():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
 
+    # print("State: " + str_application_state(currentState))
+
     for polygon in polygons:
-        drawPolygon(polygon)
+        angle = 0
+        if currentState == ApplicationState.ROTATING_POLYGON:
+            u = Point(polygon.lines[0].src.x - lastPoint.x, polygon.lines[0].src.y - lastPoint.y)
+            v = Point(polygon.lines[0].src.x - currentMousePoint.x, polygon.lines[0].src.y - currentMousePoint.y)
+
+            length_u = sqrt(u.x * u.x + u.y * u.y)
+            length_v = sqrt(v.x * v.x + v.y * v.y)
+            dot = u.x * v.x + u.y * v.y
+            aux = dot / float(length_u * length_v)
+            angle = degrees(acos(aux))
+        drawPolygon(polygon, angle)
 
     for line in previewLines:
         drawLine(line)
 
     if currentState == ApplicationState.DRAWING_POLYGON:
         drawLine(Line(lastPoint, currentMousePoint))
-    elif currentState == ApplicationState.HOLDING_POLYGON:
+    elif currentState == ApplicationState.MOVING_POLYGON:
         pl = polygons[selected_polygon]
         pl.center_around(currentMousePoint)
         p, j = getConnectedPolygons(pl)
@@ -148,6 +175,7 @@ def getConnectedPolygons(polygon):
                     output_j.append(j)
         k += 1
     return output_pl, output_j
+
 def mousePosUpdater(x, y):
     global currentMousePoint
     currentMousePoint = Point(x, y)
@@ -208,11 +236,15 @@ def onMouse1Down(x, y):
     global currentState
     global lastPoint
     global selected_polygon
+    global holding_m1
+
+    holding_m1 = True
 
     if currentState == ApplicationState.NONE:
         polygonClicked = hasClickedOnPolygon()
+        lastPoint = Point(x, y)
         if polygonClicked is not None:
-            currentState = ApplicationState.HOLDING_POLYGON
+            currentState = ApplicationState.MOVING_POLYGON
             selected_polygon = polygonClicked.p_id
             polygonClicked.update_offset(currentMousePoint)
 
@@ -223,8 +255,7 @@ def onMouse1Down(x, y):
                 joint.update_offset(currentMousePoint)
         else:
             currentState = ApplicationState.DRAWING_POLYGON
-            lastPoint = Point(x, y)
-    elif currentState == ApplicationState.HOLDING_POLYGON:
+    elif currentState == ApplicationState.ROTATING_POLYGON:
         currentState = ApplicationState.NONE
         selected_polygon = -1
 
@@ -235,6 +266,9 @@ def onMouse1Up(x, y):
     global lastPoint
     global previewLines
     global currentState
+    global holding_m1
+
+    holding_m1 = False
 
     if currentState == ApplicationState.DRAWING_POLYGON:
         #created point in polygon, check if point closes polygon
@@ -253,17 +287,21 @@ def onMouse1Up(x, y):
         if not hasIntersection(lines):
             previewLines.append(Line(lastPoint, currentMousePoint))
             lastPoint = Point(currentMousePoint.x, currentMousePoint.y)
+    elif currentState == ApplicationState.MOVING_POLYGON:
+        currentState = ApplicationState.NONE
+        selected_polygon = -1
 
-def drawPolygon(polygon):
+def drawPolygon(polygon, angle):
     glLineWidth(2.5)
     glColor3f(polygon.color[0], polygon.color[1], polygon.color[2])
-    
+
     tess = gluNewTess()
     gluTessCallback(tess, GLU_BEGIN, glBegin)
     gluTessCallback(tess, GLU_VERTEX, glVertex3dv)
     gluTessCallback(tess, GLU_END, glEnd)
     gluBeginPolygon(tess)
     for point in polygon.global_points:
+    
         pt = worldToScreenPoint(point)
         aux = [pt.x, pt.y, 0]
         gluTessVertex(tess, aux, aux)
@@ -379,6 +417,7 @@ def main():
     glutDisplayFunc(displayCallback)
     glutMouseFunc(mouseHandler)
     glutPassiveMotionFunc(mousePosUpdater)
+    glutMotionFunc(mousePosUpdater)
     glutIdleFunc(displayCallback)
 
     glutMainLoop()

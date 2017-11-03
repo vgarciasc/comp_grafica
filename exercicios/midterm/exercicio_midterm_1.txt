@@ -1,0 +1,7 @@
+1)
+    (a) 
+        GLUT_RGB: Janela será inicializada em modo RGBA.
+        GLUT_DOUBLE: Janela possuirá buffer duplo.
+        GLUT_DEPTH: Janela possuirá um buffer de profundidade.
+
+    
