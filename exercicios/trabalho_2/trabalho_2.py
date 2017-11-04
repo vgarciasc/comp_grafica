@@ -88,6 +88,14 @@ class Polygon:
             self.lines.append(Line(self.global_points[i-1], self.global_points[i]))
         self.lines.append(Line(self.global_points[0], self.global_points[len(self.global_points) - 1]))
 
+    def rotate_around(self, point, angle):
+        new_points = []
+        for lp in self.global_points:
+            new_points.append(rotatePoint(point, lp, angle))
+        self.global_points = list(new_points)
+        self.update_offset(self.lines[0].src)
+        self.center_around(self.lines[0].src)
+
 class Joint:
     polygon_curr = None
     polygon_next = None
@@ -106,11 +114,21 @@ class Joint:
     def update_offset(self, point):
         self.local_position = Point(self.global_position.x - point.x, self.global_position.y - point.y)
 
+    def rotate_around(self, point, angle):
+        self.global_position = rotatePoint(point, self.global_position, angle)
+
+def rotatePoint(origin, toRotate, angle):
+    output_x = toRotate.x * cos(angle) - toRotate.y * sin(angle) + (sin(angle) * origin.y - cos(angle) * origin.x + origin.x)
+    output_y = toRotate.x * sin(angle) + toRotate.y * cos(angle) + (- sin(angle) * origin.x - cos(angle) * origin.y + origin.y)
+    return Point(output_x, output_y)
+
 #vetor que armazena todas as linhas criadas
 currentState = ApplicationState.NONE
 previewLines = []
 polygons = []
+
 joints = []
+selected_joint = None
 
 selected_polygon = -1
 holding_m1 = False
@@ -120,23 +138,16 @@ currentMousePoint = Point(0, 0)
 
 #desenha todas as linhas e intersecoes
 def displayCallback():
+    global lastPoint
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
 
-    # print("State: " + str_application_state(currentState))
-
     for polygon in polygons:
-        angle = 0
-        if currentState == ApplicationState.ROTATING_POLYGON:
-            u = Point(polygon.lines[0].src.x - lastPoint.x, polygon.lines[0].src.y - lastPoint.y)
-            v = Point(polygon.lines[0].src.x - currentMousePoint.x, polygon.lines[0].src.y - currentMousePoint.y)
-
-            length_u = sqrt(u.x * u.x + u.y * u.y)
-            length_v = sqrt(v.x * v.x + v.y * v.y)
-            dot = u.x * v.x + u.y * v.y
-            aux = dot / float(length_u * length_v)
-            angle = degrees(acos(aux))
-        drawPolygon(polygon, angle)
+        drawPolygon(polygon)
+        for joint in joints:
+            if joint.polygon_curr.p_id == polygon.p_id or joint.polygon_next.p_id == polygon.p_id:
+                drawPoint(joint.global_position)
 
     for line in previewLines:
         drawLine(line)
@@ -151,11 +162,52 @@ def displayCallback():
             poly.center_around(currentMousePoint)
         for join in j:
             join.center_around(currentMousePoint)
+    elif currentState == ApplicationState.ROTATING_POLYGON:
+        u = Point(joints[selected_joint].global_position.x - lastPoint.x, joints[selected_joint].global_position.y - lastPoint.y)
+        v = Point(joints[selected_joint].global_position.x - currentMousePoint.x, joints[selected_joint].global_position.y - currentMousePoint.y)
 
-    for joint in joints:
-        drawPoint(joint.global_position)
+        drawLine(Line(lastPoint, joints[selected_joint].global_position))
+        drawLine(Line(currentMousePoint, joints[selected_joint].global_position))
+        # print "lastPoint: " + str(lastPoint)
+        # print "currentMousePoint: " + str(currentMousePoint)
+
+        length_u = sqrt(u.x * u.x + u.y * u.y)
+        length_v = sqrt(v.x * v.x + v.y * v.y)
+        dot = u.x * v.x + u.y * v.y
+        aux = dot / float(length_u * length_v)
+        
+        p1 = lastPoint
+        p2 = currentMousePoint
+        p3 = joints[selected_joint].global_position
+
+        sign = (p2.y - p1.y) * (p3.x - p2.x) - (p2.x - p1.x) * (p3.y - p2.y)
+
+        if aux <= 1:
+            angle = acos(aux)
+            if sign > 0:
+                angle = -angle
+               
+            for pl in getChildPolygons(polygons[selected_polygon]):
+                pl.rotate_around(joints[selected_joint].global_position, angle)
+            
+            for j in getPolygonChildJoints(polygons[selected_polygon]):
+                j.rotate_around(joints[selected_joint].global_position, angle)
+
+        lastPoint = currentMousePoint
 
     glutSwapBuffers()
+
+def getChildPolygons(polygon):
+    pool = [polygon]
+    k = 0
+    while k < len(pool):
+        pl = pool[k]
+        for joint in joints:
+            if joint.polygon_curr.p_id == pl.p_id:
+                if joint.polygon_next not in pool:
+                    pool.append(joint.polygon_next)
+        k += 1
+    return pool
 
 def getConnectedPolygons(polygon):
     k = 0
@@ -193,6 +245,20 @@ def mouseHandler(b, s, x, y):
         # elif s == GLUT_UP:
         #     onMouse2Up(x, y)
 
+def handleJointClick(parent, child):
+    global selected_joint
+    for joint in joints:
+        if joint.polygon_curr.p_id == parent.p_id and joint.polygon_next.p_id == child.p_id or \
+            joint.polygon_curr.p_id == child.p_id and joint.polygon_next.p_id == parent.p_id:
+            joints.remove(joint)
+            return
+    polygons, j = getConnectedPolygons(parent)
+    for pl in polygons:
+        if pl.p_id == child.p_id:
+            return   
+    joints.append(Joint(currentMousePoint, parent, child))
+    printJoints()
+
 def onMouse2Down(x, y):
     #if drawing polygon, cancel 
     global currentState
@@ -204,7 +270,10 @@ def onMouse2Down(x, y):
     elif currentState == ApplicationState.NONE:
         poly = hasClickedOnPolygonPair()
         if poly is not None:
-            joints.append(Joint(currentMousePoint, poly[0], poly[1]))
+            p, l = getConnectedPolygons(poly[0])
+            if len(p) == 1:
+                poly.reverse()
+            handleJointClick(poly[0], poly[1])
 
 def hasClickedOnPolygonPair():
     output = []
@@ -216,10 +285,32 @@ def hasClickedOnPolygonPair():
     return None    
 
 def hasClickedOnPolygon():
-    for polygon in polygons:
+    for i in range(len(polygons) - 1, -1, -1):
+        polygon = polygons[i]
         if pointInsidePolygon(currentMousePoint, polygon):
             return polygon
     return None
+
+def printJoints():
+    string = ""
+    for joint in joints:
+        string = string + "[" + str(joint.polygon_curr.p_id) + ", " + str(joint.polygon_next.p_id) + "],"
+    print string
+
+def getPolygonParentJoint(polygon):
+    for joint in joints:
+        if joint.polygon_next.p_id == polygon.p_id:
+            return joints.index(joint)
+    return -1
+
+def getPolygonChildJoints(polygon):
+    polygons = getChildPolygons(polygon)
+    output = []
+    for pl in polygons:
+        for joint in joints:
+            if joint.polygon_curr.p_id == pl.p_id and joint not in output:
+                output.append(joint)
+    return output
 
 def pointInsidePolygon(point, polygon):
     line = Line(point, Point(0, 0))
@@ -231,11 +322,27 @@ def pointInsidePolygon(point, polygon):
     # print str(intersections) + " intersections"
     return intersections % 2 == 1
 
+def isPolygonRoot(polygon):
+    is_a_parent = False
+    has_a_parent = False
+    joint_output = None
+
+    for joint in joints:
+        if joint.polygon_curr.p_id == polygon.p_id:
+            is_a_parent = True
+            joint_output = joint
+        if joint.polygon_next.p_id == polygon.p_id:
+            has_a_parent = True
+
+    no_joints = not is_a_parent and not has_a_parent
+    return (is_a_parent and not has_a_parent) or (no_joints)
+
 #quando o botão esquerdo do mouse é pressionado, coordenadas são armazenadas
 def onMouse1Down(x, y):
     global currentState
     global lastPoint
     global selected_polygon
+    global selected_joint
     global holding_m1
 
     holding_m1 = True
@@ -244,7 +351,12 @@ def onMouse1Down(x, y):
         polygonClicked = hasClickedOnPolygon()
         lastPoint = Point(x, y)
         if polygonClicked is not None:
-            currentState = ApplicationState.MOVING_POLYGON
+            selected_joint = getPolygonParentJoint(polygonClicked)
+            if selected_joint == -1:
+                currentState = ApplicationState.MOVING_POLYGON
+            else:
+                currentState = ApplicationState.ROTATING_POLYGON
+
             selected_polygon = polygonClicked.p_id
             polygonClicked.update_offset(currentMousePoint)
 
@@ -267,6 +379,8 @@ def onMouse1Up(x, y):
     global previewLines
     global currentState
     global holding_m1
+    global selected_joint
+    global selected_polygon
 
     holding_m1 = False
 
@@ -290,8 +404,12 @@ def onMouse1Up(x, y):
     elif currentState == ApplicationState.MOVING_POLYGON:
         currentState = ApplicationState.NONE
         selected_polygon = -1
+    elif currentState == ApplicationState.ROTATING_POLYGON:
+        currentState = ApplicationState.NONE
+        selected_polygon = -1
+        selected_joint = -1
 
-def drawPolygon(polygon, angle):
+def drawPolygon(polygon):
     glLineWidth(2.5)
     glColor3f(polygon.color[0], polygon.color[1], polygon.color[2])
 
@@ -301,7 +419,6 @@ def drawPolygon(polygon, angle):
     gluTessCallback(tess, GLU_END, glEnd)
     gluBeginPolygon(tess)
     for point in polygon.global_points:
-    
         pt = worldToScreenPoint(point)
         aux = [pt.x, pt.y, 0]
         gluTessVertex(tess, aux, aux)
