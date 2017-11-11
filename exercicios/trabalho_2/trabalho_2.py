@@ -119,6 +119,10 @@ def mouseHandler(b, s, x, y):
         if s == GLUT_DOWN:
             onMouse2Down(x, y)
 
+def keyHandler(key, x, y):
+    if key == 'c':
+        clearScreen();
+
 def onMouse1Down(x, y):
     global currentState
     global lastMousePoint
@@ -161,11 +165,17 @@ def onMouse1Up(x, y):
 
     if currentState == ApplicationState.DRAWING_POLYGON:
         #se estávamos desenhando, agora não estamos mais
-        #se um polígono foi fechado, o criamos.
+        #se um polígono foi fechado, checamos se ele é válido e o criamos.
         if len(previewLines) > 0 and currentMousePoint.distance(previewLines[0].src) < 10:
             currentState = ApplicationState.NONE
-            previewLines.append(Line(lastMousePoint, previewLines[0].src))
-            polygons.append(Polygon(previewLines, len(polygons)))
+
+            aux = list(previewLines)
+            aux.append(Line(lastMousePoint, previewLines[0].src))
+            if hasIntersection(aux):
+                previewLines = []
+                return
+            
+            polygons.append(Polygon(aux, len(polygons)))
             previewLines = []
             return
 
@@ -245,7 +255,7 @@ def hasClickedOnPolygonPair():
     for i in range(len(polygons)-1, -1, -1):
         polygon = polygons[i]
         if pointInsidePolygon(currentMousePoint, polygon):
-           output.append(polygon)
+            output.append(polygon)
     if len(output) == 2:
         return output
     return None
@@ -256,7 +266,7 @@ def getFirstPolygonClicked():
     for i in range(len(polygons)-1, -1, -1):
         polygon = polygons[i]
         if pointInsidePolygon(currentMousePoint, polygon):
-           return polygon
+            return polygon
     return None
 
 #retorna a articulação em que o polígono é 'pai'
@@ -282,7 +292,7 @@ def getChildren(polygon):
         k += 1
     return output_p, output_j
 
-#checa se um ponto está dentro de um polígono
+#checa se um ponto está dentro de um polígono (odd-even)
 def pointInsidePolygon(point, polygon):
     line = Line(point, Point(0, 0))
     intersections = 0
@@ -297,7 +307,7 @@ def pointInsidePolygon(point, polygon):
     for l in polygon_lines:
         if getIntersection(line, l):
             intersections += 1
-    
+
     return intersections % 2 == 1
 
 #retorna todos os polígonos conectados por articulações a 'polygon'
@@ -335,55 +345,67 @@ def hasIntersection(lines):
 
 #checa se há uma interseção entre dois segmentos
 def getIntersection(line_1, line_2):
-    #calcula o coeficiente angular das retas
-    if (line_1.dst.x == line_1.src.x) or (line_2.dst.x == line_2.src.x):
-        return None
-
-    if (line_1.dst.x == line_2.dst.x and line_1.dst.y == line_2.dst.y) or\
-        (line_1.src.x == line_2.dst.x and line_1.src.y == line_2.dst.y) or\
-        (line_1.dst.x == line_2.src.x and line_1.dst.y == line_2.src.y) or\
-        (line_1.src.x == line_2.src.x and line_1.src.y == line_2.src.y):
-        return None
-
-    a_1 = (line_1.dst.y - line_1.src.y) / (line_1.dst.x - line_1.src.x)
-    a_2 = (line_2.dst.y - line_2.src.y) / (line_2.dst.x - line_2.src.x)
-    #calcula o coeficiente linear das retas
-    b_1 = ((line_1.dst.x * line_1.src.y) - (line_1.src.x * line_1.dst.y)) / (line_1.dst.x - line_1.src.x)
-    b_2 = ((line_2.dst.x * line_2.src.y) - (line_2.src.x * line_2.dst.y)) / (line_2.dst.x - line_2.src.x)
+    p = line_1.src
+    r = Point(line_1.dst.x - line_1.src.x, line_1.dst.y - line_1.src.y)
+    q = line_2.src
+    s = Point(line_2.dst.x - line_2.src.x, line_2.dst.y - line_2.src.y)
     
-    #se coeficiente angular das duas é igual,
-    #linhas são paralelas, não há interseção
-    if a_1 == a_2:
-        return None
+    if (r.x == 0 and r.y == 0) or (s.x == 0 and s.y == 0):
+        return None #point
 
-    #encontra as coordenadas (x,y) da interseção entre as duas retas
-    x = (b_2 - b_1) / (a_1 - a_2)
-    y = a_2 * x + b_2
+    qp = Point(q.x - p.x, q.y - p.y)
+    pq = Point(p.x - q.x, p.y - q.y)
+    r_x_s = crossProduct(r, s)
+    qp_x_r = crossProduct(qp, r)
 
-    small_x = [x]
-    small_x.append(min(line_1.src.x, line_1.dst.x))
-    small_x.append(min(line_2.src.x, line_2.dst.x))
+    if r_x_s == 0 and qp_x_r == 0:
+        return None #collinear
+    
+    qp_x_s = crossProduct(qp, s)
+    pq_x_r = crossProduct(pq, r)
+    s_x_r = crossProduct(s, r)
+    
+    if r_x_s == 0 and qp_x_r != 0:
+        return None #parallel
 
-    large_x = [x]
-    large_x.append(max(line_1.src.x, line_1.dst.x))
-    large_x.append(max(line_2.src.x, line_2.dst.x))
+    t = float(qp_x_s) / float(r_x_s)
+    u = float(pq_x_r) / float(s_x_r)
 
-    small_y = [y]
-    small_y.append(min(line_1.src.y, line_1.dst.y))
-    small_y.append(min(line_2.src.y, line_2.dst.y))
+    if r_x_s != 0 and (t > 0 and t < 1) and (u > 0 and u < 1):
+        return Point(p.x + t*r.x, p.y + t*r.y) #intersection
+    else:
+        return None #no intersection
 
-    large_y = [y]
-    large_y.append(max(line_1.src.y, line_1.dst.y))
-    large_y.append(max(line_2.src.y, line_2.dst.y))
+#produto vetorial
+def crossProduct(point_1, point_2):
+    return point_1.x * point_2.y - point_1.y * point_2.x
 
-    if max(small_x) == x and min(large_x) == x and max(small_y) == y and min(large_y) == y:
-        return Point(x, y)
+#deleta todos os polígonos
+def clearScreen():
+    global polygons
+    global previewLines
+    global joints
+    global selected_joint
+    global selected_polygon
+    polygons = []
+    previewLines = []
+    joints = []
+    selected_joint = -1
+    selected_polygon = -1
 
-    return None
+#imprime informações de help
+def printHelp():
+    print "======================================="
+    print "Trabalho 2 de CG - Desenhando Polígonos"
+    print "======================================="
+    print "Desenhar: botão direito em área vazia, iniciando polígono"
+    print "Mover: clicar em um polígono 'raiz' e arrastar com botão direito"
+    print "Rotacionar: clicar em um polígono 'não-raiz' e arrastar com o botão direito"
 
 #utiliza métodos do PyOpenGL para realizar as ações básicas
 #(abrir tela, chamar callbacks de display, etc)
 def main():
+    printHelp();
     glutInit()
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_DOUBLE)
 
@@ -393,6 +415,7 @@ def main():
     
     glutDisplayFunc(displayCallback)
     glutMouseFunc(mouseHandler)
+    glutKeyboardFunc(keyHandler)
     glutPassiveMotionFunc(mousePosUpdater)
     glutMotionFunc(mousePosUpdater)
     glutIdleFunc(displayCallback)
