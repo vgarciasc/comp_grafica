@@ -123,6 +123,7 @@ def keyHandler(key, x, y):
     if key == 'c':
         clearScreen();
 
+#clique do botão esquerdo do mouse
 def onMouse1Down(x, y):
     global currentState
     global lastMousePoint
@@ -155,6 +156,7 @@ def onMouse1Down(x, y):
             #se nenhum polígono foi clicado, começamos a desenhar
             currentState = ApplicationState.DRAWING_POLYGON
 
+#levantar do clique do botão esquerdo do mouse
 def onMouse1Up(x, y):
     global drawingPolygon
     global lastMousePoint
@@ -164,7 +166,6 @@ def onMouse1Up(x, y):
     global selected_polygon
 
     if currentState == ApplicationState.DRAWING_POLYGON:
-        #se estávamos desenhando, agora não estamos mais
         #se um polígono foi fechado, checamos se ele é válido e o criamos.
         if len(previewLines) > 0 and currentMousePoint.distance(previewLines[0].src) < 10:
             currentState = ApplicationState.NONE
@@ -198,6 +199,7 @@ def onMouse1Up(x, y):
         selected_polygon = -1
         selected_joint = -1
 
+#clique do botão direito do mouse
 def onMouse2Down(x, y):
     global currentState
     global previewLines
@@ -226,7 +228,7 @@ def handleJointClick(parent, child):
         if joint.connected(parent) and joint.connected(child):
             joints.remove(joint)
             return
-    #checa se articulação gera um ciclo
+    #impede que articulação gere um ciclo
     p1, j1 = getConnectedPolygons(parent)
     p2, j2 = getConnectedPolygons(child)
     for polygon in p1:
@@ -351,7 +353,7 @@ def getIntersection(line_1, line_2):
     s = Point(line_2.dst.x - line_2.src.x, line_2.dst.y - line_2.src.y)
     
     if (r.x == 0 and r.y == 0) or (s.x == 0 and s.y == 0):
-        return None #point
+        return None #ponto
 
     qp = Point(q.x - p.x, q.y - p.y)
     pq = Point(p.x - q.x, p.y - q.y)
@@ -359,28 +361,28 @@ def getIntersection(line_1, line_2):
     qp_x_r = crossProduct(qp, r)
 
     if r_x_s == 0 and qp_x_r == 0:
-        return None #collinear
+        return None #colinear
     
     qp_x_s = crossProduct(qp, s)
     pq_x_r = crossProduct(pq, r)
     s_x_r = crossProduct(s, r)
     
     if r_x_s == 0 and qp_x_r != 0:
-        return None #parallel
+        return None #paralelo
 
     t = float(qp_x_s) / float(r_x_s)
     u = float(pq_x_r) / float(s_x_r)
 
     if r_x_s != 0 and (t > 0 and t < 1) and (u > 0 and u < 1):
-        return Point(p.x + t*r.x, p.y + t*r.y) #intersection
+        return Point(p.x + t*r.x, p.y + t*r.y) #interseção!
     else:
-        return None #no intersection
+        return None #sem interseção
 
 #produto vetorial
 def crossProduct(point_1, point_2):
     return point_1.x * point_2.y - point_1.y * point_2.x
 
-#deleta todos os polígonos
+#deleta todos os polígonos e articulações
 def clearScreen():
     global polygons
     global previewLines
@@ -395,12 +397,16 @@ def clearScreen():
 
 #imprime informações de help
 def printHelp():
-    print "======================================="
-    print "Trabalho 2 de CG - Desenhando Polígonos"
-    print "======================================="
-    print "Desenhar: botão direito em área vazia, iniciando polígono"
-    print "Mover: clicar em um polígono 'raiz' e arrastar com botão direito"
-    print "Rotacionar: clicar em um polígono 'não-raiz' e arrastar com o botão direito"
+    print "Estudante: Vinícius Garcia / DRE: 115.039.031"
+    print "==============================================="
+    print "Trabalho 2 de CG 2017.2 - Desenhando Polígonos"
+    print "==============================================="
+    print "Desenhar: botão esquerdo do mouse em área vazia, iniciando polígono."
+    print "Cancelar desenho de polígono: botão direito do mouse enquanto estiver desenhando."
+    print "Adicionar/remover articulação: botão direito do mouse em cima da interseção entre dois polígonos."
+    print "Mover: botão esquerdo do mouse em um polígono 'raiz' e arrastar."
+    print "Rotacionar: botão esquerdo do mouse em um polígono 'não-raiz' e arrastar."
+    print "Limpar a tela: pressionar tecla 'C'."
 
 #utiliza métodos do PyOpenGL para realizar as ações básicas
 #(abrir tela, chamar callbacks de display, etc)
