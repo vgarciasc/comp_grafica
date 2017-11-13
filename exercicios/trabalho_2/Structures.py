@@ -56,7 +56,7 @@ class Polygon:
         self.color = [random.randrange(0, 255) / float(255), random.randrange(0, 255) / float(255), random.randrange(0, 255) / float(255)]
 
         for i in range(0, len(lines)):
-            if lines[i].length > 1:
+            if lines[i].length() > 1:
                 self.global_pts.append(lines[i].src)
 
         self.update_offset(lines[0].src)
